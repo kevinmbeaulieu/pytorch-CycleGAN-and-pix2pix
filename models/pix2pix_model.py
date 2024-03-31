@@ -69,6 +69,9 @@ class Pix2PixModel(BaseModel):
             self.optimizer_D = torch.optim.Adam(self.netD.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
             self.optimizers.append(self.optimizer_G)
             self.optimizers.append(self.optimizer_D)
+            self.losses = {}
+            for loss_name in self.loss_names:
+                self.losses[loss_name] = []
 
     def set_input(self, input):
         """Unpack input data from the dataloader and perform necessary pre-processing steps.
@@ -100,6 +103,8 @@ class Pix2PixModel(BaseModel):
         # combine loss and calculate gradients
         self.loss_D = (self.loss_D_fake + self.loss_D_real) * 0.5
         self.loss_D.backward()
+        self.losses['D_real'].append(self.loss_D_real.item())
+        self.losses['D_fake'].append(self.loss_D_fake.item())
 
     def backward_G(self):
         """Calculate GAN and L1 loss for the generator"""
@@ -112,6 +117,8 @@ class Pix2PixModel(BaseModel):
         # combine loss and calculate gradients
         self.loss_G = self.loss_G_GAN + self.loss_G_L1
         self.loss_G.backward()
+        self.losses['G_GAN'].append(self.loss_G_GAN.item())
+        self.losses['G_L1'].append(self.loss_G_L1.item())
 
     def optimize_parameters(self):
         self.forward()                   # compute fake images: G(A)

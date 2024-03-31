@@ -33,6 +33,7 @@ class BaseModel(ABC):
         self.gpu_ids = opt.gpu_ids
         self.isTrain = opt.isTrain
         self.device = torch.device('cuda:{}'.format(self.gpu_ids[0])) if self.gpu_ids else torch.device('cpu')  # get device name: CPU or GPU
+        # self.device = torch.device('mps')
         self.save_dir = os.path.join(opt.checkpoints_dir, opt.name)  # save all the checkpoints to save_dir
         if opt.preprocess != 'scale_width':  # with [scale_width], input images might have different sizes, which hurts the performance of cudnn.benchmark.
             torch.backends.cudnn.benchmark = True
@@ -158,6 +159,16 @@ class BaseModel(ABC):
                     net.cuda(self.gpu_ids[0])
                 else:
                     torch.save(net.cpu().state_dict(), save_path)
+                    net.cpu()
+
+        for name in self.loss_names:
+            if isinstance(name, str):
+                save_filename = '%s_loss_%s.log' % (epoch, name)
+                save_path = os.path.join(self.save_dir, save_filename)
+                losses = self.losses[name]
+                with open(save_path, 'a') as f:
+                    for loss in losses:
+                        f.write('%f\n' % loss)
 
     def __patch_instance_norm_state_dict(self, state_dict, module, keys, i=0):
         """Fix InstanceNorm checkpoints incompatibility (prior to 0.4)"""
