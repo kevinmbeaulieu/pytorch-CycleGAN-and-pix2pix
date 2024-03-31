@@ -18,17 +18,32 @@ See options/base_options.py and options/train_options.py for more training optio
 See training and test tips at: https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/master/docs/tips.md
 See frequently asked questions at: https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/master/docs/qa.md
 """
+import os
 import time
+import torch
+from collections import defaultdict
 from options.train_options import TrainOptions
 from data import create_dataset
 from models import create_model
 from util.visualizer import Visualizer
+
+def save_losses(model, losses, phase, epoch):
+    for loss_name, loss_value in losses.items():
+        save_filename = f'{epoch}_{phase}_loss_{loss_name}.log'
+        save_path = os.path.join(model.save_dir, save_filename)
+        with open(save_path, 'a') as f:
+            f.write(f'{loss_value}\n')
 
 if __name__ == '__main__':
     opt = TrainOptions().parse()   # get training options
     dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
     dataset_size = len(dataset)    # get the number of images in the dataset.
     print('The number of training images = %d' % dataset_size)
+    val_opt = opt
+    val_opt.phase = 'val'
+    val_dataset = create_dataset(val_opt)
+    val_dataset_size = len(val_dataset)
+    print('The number of validation images = %d' % val_dataset_size)
 
     model = create_model(opt)      # create a model given opt.model and other options
     model.setup(opt)               # regular setup: load and print networks; create schedulers
@@ -69,6 +84,33 @@ if __name__ == '__main__':
                 model.save_networks(save_suffix)
 
             iter_data_time = time.time()
+
+        # Save training/validation loss at the end of each epoch
+        model.eval()
+        print('computing training loss at the end of epoch %d' % epoch)
+        epoch_train_losses = defaultdict(list)
+        for i, data in enumerate(dataset):
+            model.set_input(data)
+            with torch.no_grad():
+                model.compute_losses()
+                losses = model.get_current_losses()
+                for loss_name, loss_value in losses.items():
+                    epoch_train_losses[loss_name].append(loss_value)
+        epoch_avg_train_losses = {loss_name: sum(losses) / len(losses) for loss_name, losses in epoch_train_losses.items()}
+        save_losses(model, epoch_avg_train_losses, 'train', epoch)
+        save_losses(model, epoch_avg_train_losses, 'train', 'latest')
+        print('computing validation loss at the end of epoch %d' % epoch)
+        epoch_val_losses = defaultdict(list)
+        for i, data in enumerate(val_dataset):
+            model.set_input(data)
+            model.compute_losses()
+            losses = model.get_current_losses()
+            for loss_name, loss_value in losses.items():
+                epoch_val_losses[loss_name].append(loss_value)
+        epoch_avg_val_losses = {loss_name: sum(losses) / len(losses) for loss_name, losses in epoch_val_losses.items()}
+        save_losses(model, epoch_avg_val_losses, 'val', epoch)
+        save_losses(model, epoch_avg_val_losses, 'val', 'latest')
+        model.train()
 
         if epoch % opt.save_epoch_freq == 0:              # cache our model every <save_epoch_freq> epochs
             print('saving the model at the end of epoch %d, iters %d' % (epoch, total_iters))

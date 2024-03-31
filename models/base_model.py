@@ -96,6 +96,12 @@ class BaseModel(ABC):
                 net = getattr(self, 'net' + name)
                 net.eval()
 
+    def train(self):
+        for name in self.model_names:
+            if isinstance(name, str):
+                net = getattr(self, 'net' + name)
+                net.train()
+
     def test(self):
         """Forward function used in test time.
 
@@ -160,15 +166,6 @@ class BaseModel(ABC):
                 else:
                     torch.save(net.cpu().state_dict(), save_path)
                     net.cpu()
-
-        for name in self.loss_names:
-            if isinstance(name, str):
-                save_filename = '%s_loss_%s.log' % (epoch, name)
-                save_path = os.path.join(self.save_dir, save_filename)
-                losses = self.losses[name]
-                with open(save_path, 'a') as f:
-                    for loss in losses:
-                        f.write('%f\n' % loss)
 
     def __patch_instance_norm_state_dict(self, state_dict, module, keys, i=0):
         """Fix InstanceNorm checkpoints incompatibility (prior to 0.4)"""
